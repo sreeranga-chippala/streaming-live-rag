@@ -71,6 +71,7 @@ def build_index():
         path
         for path in RAW_DIR.rglob("*")
         if path.is_file()
+        and not path.name.startswith(".")
     ]
 
     if not files:

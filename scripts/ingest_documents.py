@@ -72,14 +72,12 @@ def ingest_documents():
         chunk_overlap=CHUNK_OVERLAP
     )
 
-    files = sorted(
-        [
-            path
-            for path in RAW_DIR.rglob("*")
-            if path.is_file()
-        ],
-        key=lambda path: str(path).lower()
-    )
+    files = [
+        path
+        for path in RAW_DIR.rglob("*")
+        if path.is_file()
+        and not path.name.startswith(".")
+    ]
 
     if not files:
 
