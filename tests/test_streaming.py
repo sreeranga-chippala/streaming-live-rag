@@ -102,6 +102,7 @@ def test_decision_timestamp_matches_chunk():
 
     assert decision.timestamp == 0.8
 
+
 def test_duplicate_retrieval_is_suppressed():
     controller = StreamController()
 
@@ -124,6 +125,7 @@ def test_duplicate_retrieval_is_suppressed():
     assert second_decision.action == RetrievalAction.NO_RETRIEVAL
     assert second_decision.reason == "query_already_retrieved"
     assert second_decision.query is None
+
 
 def test_changed_query_triggers_new_retrieval():
     controller = StreamController()
@@ -148,3 +150,56 @@ def test_changed_query_triggers_new_retrieval():
 
     assert changed_decision.action == RetrievalAction.RETRIEVE
     assert changed_decision.query == changed_text
+
+
+def test_duplicate_retrieval_is_session_scoped():
+    controller = StreamController()
+
+    chunk_a = TranscriptChunk(
+        session_id="session-a",
+        text="I need to plan a customer workshop in Pune",
+        timestamp=0.0,
+    )
+
+    chunk_b = TranscriptChunk(
+        session_id="session-b",
+        text="I need to plan a customer workshop in Pune",
+        timestamp=0.0,
+    )
+
+    first = controller.decide(
+        chunk=chunk_a,
+        accumulated_text=chunk_a.text,
+    )
+
+    second = controller.decide(
+        chunk=chunk_b,
+        accumulated_text=chunk_b.text,
+    )
+
+    assert first.action == RetrievalAction.RETRIEVE
+    assert second.action == RetrievalAction.RETRIEVE
+
+
+def test_duplicate_retrieval_is_suppressed_within_session():
+    controller = StreamController()
+
+    chunk = TranscriptChunk(
+        session_id="session-a",
+        text="I need to plan a customer workshop in Pune",
+        timestamp=0.0,
+    )
+
+    first = controller.decide(
+        chunk=chunk,
+        accumulated_text=chunk.text,
+    )
+
+    second = controller.decide(
+        chunk=chunk,
+        accumulated_text=chunk.text,
+    )
+
+    assert first.action == RetrievalAction.RETRIEVE
+    assert second.action == RetrievalAction.NO_RETRIEVAL
+    assert second.reason == "query_already_retrieved"

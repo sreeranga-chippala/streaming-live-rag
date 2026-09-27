@@ -80,3 +80,67 @@ def test_pipeline_preserves_session_state():
     assert len(session.transcript) == 1
     assert len(session.queries) == 1
     assert len(session.intents) == 1
+
+    
+class MockMultiQueryRetriever:
+    def __init__(self):
+        self.received_queries = []
+
+    def retrieve(self, subqueries):
+        self.received_queries = list(subqueries)
+
+        return [
+            {
+                "chunk_id": "test_chunk_001",
+                "text": "Customer workshops require advance planning.",
+                "metadata": {
+                    "source": "test_document.txt",
+                    "section": "1.1",
+                },
+                "reranker_score": 0.91,
+                "reranker_rank": 1,
+            }
+        ]
+
+    
+def test_pipeline_integrates_retrieval_results():
+    mock_retriever = MockMultiQueryRetriever()
+
+    pipeline = StreamingRAGPipeline(
+        multi_query_retriever=mock_retriever,
+    )
+
+    result = pipeline.process_chunk(
+        make_chunk(
+            "I need to plan a customer workshop in Pune",
+            0.8,
+        )
+    )
+
+    assert result.retrieval_decision.action == RetrievalAction.RETRIEVE
+
+    assert result.refined_queries
+
+    assert mock_retriever.received_queries == [
+        refined_query.refined_query
+        for refined_query in result.refined_queries
+    ]
+
+    assert result.retrieved_results
+
+    retrieved = result.retrieved_results[0]
+
+    assert retrieved["chunk_id"] == "test_chunk_001"
+    assert retrieved["text"] == (
+        "Customer workshops require advance planning."
+    )
+    assert retrieved["metadata"]["source"] == (
+        "test_document.txt"
+    )
+    assert retrieved["metadata"]["section"] == "1.1"
+    assert retrieved["reranker_score"] == 0.91
+    assert retrieved["reranker_rank"] == 1
+
+    assert result.session.retrieved_context == [
+        "Customer workshops require advance planning."
+    ]

@@ -146,7 +146,7 @@ class StreamController:
         # Stores the normalized form of the most recently retrieved
         # query so that repeated transcript chunks do not trigger
         # duplicate retrieval.
-        self._last_retrieved_query: str | None = None
+        self._last_retrieved_query: dict[str, str] = {}
 
     def decide(
         self,
@@ -215,7 +215,10 @@ class StreamController:
 
                 # Avoid retrieving the same query repeatedly as
                 # additional transcript chunks arrive.
-                if self._is_duplicate_retrieval(query):
+                if self._is_duplicate_retrieval(
+                    session_id=chunk.session_id,
+                    query=query,
+                ):
                     return self._no_retrieval(
                         chunk,
                         reason="query_already_retrieved",
@@ -408,18 +411,24 @@ class StreamController:
             0.99,
         )
 
-    def _is_duplicate_retrieval(self, query: str) -> bool:
-        """
-        Determine whether this query is effectively the same as the
-        most recently retrieved query.
-        """
+    def _is_duplicate_retrieval(
+        self,
+        session_id: str,
+        query: str,
+    ) -> bool:
+        """Check whether this query was already retrieved in this session."""
 
         normalized_query = self._normalize(query)
 
-        if self._last_retrieved_query is None:
-            return False
+        last_query = self._last_retrieved_query.get(
+            session_id
+        )
 
-        return normalized_query == self._last_retrieved_query
+        if last_query == normalized_query:
+            return True
+
+        self._last_retrieved_query[session_id] = normalized_query
+        return False
 
     def _wait(
         self,
@@ -444,7 +453,7 @@ class StreamController:
     ) -> RetrievalDecision:
         # Store normalized form for future duplicate detection,
         # while preserving the original query in the decision.
-        self._last_retrieved_query = self._normalize(query)
+        self._last_retrieved_query[chunk.session_id] = self._normalize(query)
 
         return RetrievalDecision(
             action=RetrievalAction.RETRIEVE,
@@ -466,4 +475,12 @@ class StreamController:
             query=None,
             confidence=confidence,
             timestamp=chunk.timestamp,
+        )
+
+    def clear_session(self, session_id: str) -> None:
+        """Release retrieval-controller state for a closed session."""
+
+        self._last_retrieved_query.pop(
+            session_id,
+            None,
         )

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 from src.intelligence.intent_detector import (
     IntentDetector,
@@ -16,6 +17,7 @@ from src.intelligence.session_manager import (
     SessionManager,
     SessionState,
 )
+from src.retrieval.multi_query_retriever import MultiQueryRetriever
 from src.streaming.chunk_handler import (
     ChunkHandler,
     ChunkProcessingResult,
@@ -40,16 +42,16 @@ class PipelineResult:
     intent: IntentResult | None
     decomposition: DecompositionResult | None
     refined_queries: tuple[RefinedQuery, ...]
+    retrieved_results: tuple[dict[str, Any], ...]
     session: SessionState
 
 
 class StreamingRAGPipeline:
     """
-    Orchestrates the Person 1 streaming and intelligence stages.
+    Orchestrates the streaming, intelligence, and optional retrieval stages.
 
-    Retrieval and generation are intentionally kept outside this
-    implementation. The pipeline prepares retrieval-ready queries
-    and exposes a clean boundary for downstream components.
+    Retrieval is injected through MultiQueryRetriever so this pipeline
+    remains independent of the underlying retrieval implementation.
     """
 
     def __init__(
@@ -59,6 +61,7 @@ class StreamingRAGPipeline:
         intent_detector: IntentDetector | None = None,
         query_decomposer: QueryDecomposer | None = None,
         query_refiner: QueryRefiner | None = None,
+        multi_query_retriever: MultiQueryRetriever | None = None,
     ) -> None:
         self.session_manager = (
             session_manager or SessionManager()
@@ -75,6 +78,7 @@ class StreamingRAGPipeline:
         self.query_refiner = (
             query_refiner or QueryRefiner()
         )
+        self.multi_query_retriever = multi_query_retriever
 
         self._chunk_handlers: dict[str, ChunkHandler] = {}
 
@@ -84,7 +88,7 @@ class StreamingRAGPipeline:
     ) -> PipelineResult:
         """
         Process one incoming transcript chunk through the
-        streaming and intelligence stages.
+        streaming, intelligence, and optional retrieval stages.
         """
 
         session = self.session_manager.get_or_create(
@@ -114,6 +118,7 @@ class StreamingRAGPipeline:
                 intent=None,
                 decomposition=None,
                 refined_queries=(),
+                retrieved_results=(),
                 session=session,
             )
 
@@ -150,6 +155,32 @@ class StreamingRAGPipeline:
             for sub_query in decomposition.sub_queries
         )
 
+        retrieved_results: tuple[dict[str, Any], ...] = ()
+
+        if self.multi_query_retriever is not None:
+            results = self.multi_query_retriever.retrieve(
+                [
+                    refined_query.refined_query
+                    for refined_query in refined_queries
+                ]
+            )
+
+            retrieved_results = tuple(results)
+
+            context_parts = [
+                result["text"]
+                for result in results
+                if isinstance(result.get("text"), str)
+                and result["text"].strip()
+            ]
+
+            if context_parts:
+                self.session_manager.add_retrieved_context(
+                    session_id=chunk.session_id,
+                    context="\n\n".join(context_parts),
+                    timestamp=chunk.timestamp,
+                )
+
         return PipelineResult(
             session_id=chunk.session_id,
             chunk_result=chunk_result,
@@ -157,6 +188,7 @@ class StreamingRAGPipeline:
             intent=intent,
             decomposition=decomposition,
             refined_queries=refined_queries,
+            retrieved_results=retrieved_results,
             session=session,
         )
 
@@ -184,6 +216,7 @@ class StreamingRAGPipeline:
         """
 
         self._chunk_handlers.pop(session_id, None)
+        self.stream_controller.clear_session(session_id)
 
         return self.session_manager.close_session(
             session_id
