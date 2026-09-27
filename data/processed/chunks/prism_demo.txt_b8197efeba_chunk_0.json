@@ -1,0 +1,12 @@
+{
+  "text": "﻿Samsung PRISM Streaming Live RAG Project This project implements a streaming Retrieval-Augmented Generation system. The system receives transcript chunks during a live conversation. It determines whether retrieval is necessary, decomposes complex requests into multiple subqueries, retrieves relevant information, fuses and reranks the results, and generates a grounded answer with citations. The streaming pipeline contains transcript streaming, chunk handling, retrieval decision logic, intent detection, query decomposition, query refinement, session management, and orchestration. The retrieval pipeline uses semantic search, keyword search, reciprocal rank fusion, and reranking. The generation layer produces answers from retrieved evidence and attaches citations to the answer. The evaluation layer measures retrieval recall, groundedness, citation support, time to first token, latency, and retrieval statistics.",
+  "metadata": {
+    "source": "prism_demo.txt",
+    "file_path": "data\\raw\\documents\\prism_demo.txt",
+    "file_type": ".txt",
+    "file_size_bytes": 931,
+    "chunk_id": "prism_demo.txt_b8197efeba_chunk_0",
+    "chunk_index": 0,
+    "chunk_word_count": 115
+  }
+}
