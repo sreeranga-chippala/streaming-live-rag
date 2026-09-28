@@ -4,3 +4,5 @@ uvicorn
 streamlit
 sentence-transformers
 faiss-cpu
+
+google-genai

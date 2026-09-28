@@ -54,3 +54,4 @@ dist/
 .coverage
 htmlcov/
 .pytest_cache/
+.env
