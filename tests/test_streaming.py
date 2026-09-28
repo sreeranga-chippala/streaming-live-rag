@@ -203,3 +203,32 @@ def test_duplicate_retrieval_is_suppressed_within_session():
     assert first.action == RetrievalAction.RETRIEVE
     assert second.action == RetrievalAction.NO_RETRIEVAL
     assert second.reason == "query_already_retrieved"
+
+
+def test_final_streaming_question_retrieves_after_fragment():
+    controller = StreamController()
+
+    first_text = "Who is eligible"
+
+    first_decision = controller.decide(
+        make_chunk(first_text, 0.5),
+        first_text,
+    )
+
+    assert first_decision.action == RetrievalAction.WAIT
+    assert first_decision.query is None
+
+    final_text = "Who is eligible for work from home?"
+
+    final_decision = controller.decide(
+        make_chunk(
+            "for work from home?",
+            1.0,
+            is_final=True,
+        ),
+        final_text,
+    )
+
+    assert final_decision.action == RetrievalAction.RETRIEVE
+    assert final_decision.query == final_text
+    assert final_decision.reason == "final_information_request"

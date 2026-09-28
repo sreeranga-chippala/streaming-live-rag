@@ -121,6 +121,7 @@ class StreamController:
         "refund",
         "deadline",
         "eligibility",
+        "eligible",
         "support",
         "options",
         "details",
