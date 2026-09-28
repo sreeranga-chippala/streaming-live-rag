@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from dotenv import load_dotenv
@@ -27,7 +28,9 @@ from src.streaming.transcript_stream import TranscriptChunk
 
 
 class ChatRequest(BaseModel):
-    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    session_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
     text: str
     is_final: bool = True
     sequence_id: int | None = None
@@ -62,54 +65,52 @@ class RAGApplication:
         pipeline: StreamingRAGPipeline | None = None,
         generator: AnswerGenerator | None = None,
     ) -> None:
-        if pipeline is None:
-            embedding_model = EmbeddingModel()
-
-            vector_store = VectorStore(
-                index_dir="data/processed/vector_store",
-                dimension=embedding_model.get_dimension(),
-            )
-
-            retriever = Retriever(
-                embedding_model=embedding_model,
-                vector_store=vector_store,
-                default_top_k=5,
-            )
-
-            hybrid_search = HybridSearch(
-                retriever=retriever,
-                vector_store=vector_store,
-                semantic_top_k=5,
-                keyword_top_k=5,
-            )
-
-            fusion = ReciprocalRankFusion(k=60)
-
-            reranker = Reranker(
-                model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
-                batch_size=16,
-            )
-
-            multi_query_retriever = MultiQueryRetriever(
-                hybrid_search=hybrid_search,
-                fusion=fusion,
-                reranker=reranker,
-                default_subquery_top_k=5,
-                default_final_top_k=5,
-                semantic_weight=1.0,
-                keyword_weight=1.0,
-            )
-
-            self.pipeline = StreamingRAGPipeline(
-                multi_query_retriever=multi_query_retriever,
-            )
-        else:
-            self.pipeline = pipeline
-
         self.generator = generator or AnswerGenerator()
         self.citations = CitationManager()
         self.grounding = GroundingChecker()
         self.evaluator = Evaluator(self.grounding)
+
+        self.pipeline = pipeline or StreamingRAGPipeline(
+            retriever_factory=self._build_retriever
+        )
+
+    def _build_retriever(self) -> MultiQueryRetriever:
+        embedding_model = EmbeddingModel()
+
+        vector_store = VectorStore(
+            index_dir="data/processed/vector_store",
+            dimension=embedding_model.get_dimension(),
+        )
+
+        retriever = Retriever(
+            embedding_model=embedding_model,
+            vector_store=vector_store,
+            default_top_k=5,
+        )
+
+        hybrid_search = HybridSearch(
+            retriever=retriever,
+            vector_store=vector_store,
+            semantic_top_k=5,
+            keyword_top_k=5,
+        )
+
+        fusion = ReciprocalRankFusion(k=60)
+
+        reranker = Reranker(
+            model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+            batch_size=16,
+        )
+
+        return MultiQueryRetriever(
+            hybrid_search=hybrid_search,
+            fusion=fusion,
+            reranker=reranker,
+            default_subquery_top_k=5,
+            default_final_top_k=5,
+            semantic_weight=1.0,
+            keyword_weight=1.0,
+        )
 
     def process(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
@@ -131,7 +132,9 @@ class RAGApplication:
         retrieved = list(result.retrieved_results)
 
         if not retrieved:
-            elapsed = (time.perf_counter() - started) * 1000.0
+            elapsed = (
+                time.perf_counter() - started
+            ) * 1000.0
 
             return ChatResponse(
                 session_id=request.session_id,
@@ -146,7 +149,10 @@ class RAGApplication:
                 latency_ms=round(elapsed, 2),
             )
 
-        query = result.retrieval_decision.query or request.text
+        query = (
+            result.retrieval_decision.query
+            or request.text
+        )
 
         session_context = self.pipeline.session_manager.get_context(
             result.session.session_id
@@ -169,7 +175,9 @@ class RAGApplication:
 
         result.session.current_answer = generated.answer
 
-        elapsed = (time.perf_counter() - started) * 1000.0
+        elapsed = (
+            time.perf_counter() - started
+        ) * 1000.0
 
         response = ChatResponse(
             session_id=request.session_id,
@@ -200,7 +208,10 @@ class RAGApplication:
             citations=citations,
             retrieval_required=True,
             started_at=started,
-            first_token_at=started + generated.latency_ms / 1000.0,
+            first_token_at=(
+                started
+                + generated.latency_ms / 1000.0
+            ),
             completed_at=time.perf_counter(),
         )
 
@@ -224,7 +235,10 @@ def health() -> dict[str, str]:
     }
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post(
+    "/chat",
+    response_model=ChatResponse,
+)
 def chat(request: ChatRequest) -> ChatResponse:
     try:
         return service.process(request)

@@ -29,7 +29,9 @@ def test_pipeline_waits_for_incomplete_query():
 
 
 def test_pipeline_processes_early_retrieval():
-    pipeline = StreamingRAGPipeline()
+    pipeline = StreamingRAGPipeline(
+        retriever_factory=MockMultiQueryRetriever,
+    )
 
     result = pipeline.process_chunk(
         make_chunk(
@@ -65,7 +67,9 @@ def test_pipeline_suppresses_previous_answer_request():
 
 
 def test_pipeline_preserves_session_state():
-    pipeline = StreamingRAGPipeline()
+    pipeline = StreamingRAGPipeline(
+        retriever_factory=MockMultiQueryRetriever,
+    )
 
     result = pipeline.process_chunk(
         make_chunk(

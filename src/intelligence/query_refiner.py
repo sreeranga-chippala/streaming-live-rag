@@ -3,6 +3,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class RefinedQuery:
+    """
+    Represents a retrieval-ready query after refinement.
+    """
+
     original_query: str
     refined_query: str
     changed: bool
@@ -10,11 +14,18 @@ class RefinedQuery:
     def __post_init__(self) -> None:
         if not self.original_query.strip():
             raise ValueError("original_query cannot be empty")
+
         if not self.refined_query.strip():
             raise ValueError("refined_query cannot be empty")
 
 
 class QueryRefiner:
+    """
+    Converts conversational queries into concise retrieval-ready queries.
+
+    The refiner does not perform retrieval or answer generation.
+    """
+
     _FILLER_PREFIXES = (
         "can you tell me ",
         "could you tell me ",
@@ -37,12 +48,17 @@ class QueryRefiner:
         query: str,
         session_context: str | None = None,
     ) -> RefinedQuery:
+        """
+        Refine a query using optional conversational session context.
+        """
+
         original_query = query.strip()
 
         if not original_query:
             raise ValueError("query cannot be empty")
 
         refined = " ".join(original_query.split())
+
         refined = self._remove_filler_prefix(refined)
         refined = self._remove_filler_words(refined)
         refined = refined.strip()
@@ -60,6 +76,10 @@ class QueryRefiner:
         )
 
     def _remove_filler_prefix(self, query: str) -> str:
+        """
+        Remove conversational prefixes without changing the actual request.
+        """
+
         normalized = query.lower()
 
         for prefix in self._FILLER_PREFIXES:
@@ -69,7 +89,12 @@ class QueryRefiner:
         return query
 
     def _remove_filler_words(self, query: str) -> str:
+        """
+        Remove simple conversational filler words.
+        """
+
         words = query.split()
+
         filtered: list[str] = []
 
         for word in words:
@@ -87,6 +112,13 @@ class QueryRefiner:
         query: str,
         session_context: str,
     ) -> str:
+        """
+        Resolve simple conversational references using session context.
+
+        This is intentionally conservative. It only handles explicit
+        references such as "that policy" or "that venue".
+        """
+
         normalized = query.lower()
 
         reference_terms = (
@@ -100,13 +132,7 @@ class QueryRefiner:
             "this procedure",
         )
 
-        follow_up = normalized.startswith(
-            ("and ", "also ", "what about ", "how about ")
-        )
-
-        if not follow_up and not any(
-            term in normalized for term in reference_terms
-        ):
+        if not any(term in normalized for term in reference_terms):
             return query
 
         return f"{query} Context: {session_context}"
