@@ -158,7 +158,10 @@ class RAGApplication:
             session_context=session_context,
         )
 
-        citations = self.citations.build_citations(retrieved)
+        citations = self.citations.build_citations(
+            answer=generated.answer,
+            retrieved_results=retrieved,
+        )
         grounding = self.grounding.check(
             generated.answer,
             retrieved,

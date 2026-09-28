@@ -17,25 +17,101 @@ class Citation:
 
 
 class CitationManager:
-    """Builds stable source citations for the UI and answer metadata."""
+    """Builds citations from evidence that supports the generated answer."""
+
+    STOPWORDS = {
+        "the", "a", "an", "and", "or", "but", "is", "are", "was", "were",
+        "to", "of", "in", "on", "for", "with", "as", "by", "from", "that",
+        "this", "it", "be", "has", "have", "had", "at", "into", "than",
+        "then", "they", "their", "its", "also", "can", "may", "will",
+    }
 
     def build_citations(
         self,
+        answer: str,
         retrieved_results: Iterable[dict[str, Any]],
         max_citations: int = 6,
+        min_support: float = 0.35,
+        max_rank: int = 3,
     ) -> list[Citation]:
         if max_citations <= 0:
             raise ValueError("max_citations must be greater than 0")
+        if max_rank <= 0:
+            raise ValueError("max_rank must be greater than 0")
+        if not 0.0 <= min_support <= 1.0:
+            raise ValueError("min_support must be between 0 and 1")
+
+        answer = answer.strip()
+
+        if not answer:
+            raise ValueError("answer cannot be empty")
+
+        answer_sentences = self._sentences(answer)
+
+        if not answer_sentences:
+            return []
+
+        candidates = []
+
+        for result in retrieved_results:
+            if not isinstance(result, dict):
+                continue
+
+            reranker_rank = result.get("reranker_rank")
+
+            if (
+                isinstance(reranker_rank, int)
+                and reranker_rank > max_rank
+            ):
+                continue
+
+            text = str(result.get("text", "")).strip()
+
+            if not text:
+                continue
+
+            evidence_tokens = self._content_tokens(text)
+
+            if not evidence_tokens:
+                continue
+
+            # A citation is relevant if it strongly supports at least
+            # one complete sentence of the generated answer.
+            best_support = max(
+                self._sentence_support(
+                    sentence,
+                    evidence_tokens,
+                )
+                for sentence in answer_sentences
+            )
+
+            candidates.append(
+                (best_support, result)
+            )
+
+        relevant_results = [
+            result
+            for support, result in candidates
+            if support >= min_support
+        ]
+
+        # Preserve the strongest evidence if nothing passes the threshold.
+        if not relevant_results and candidates:
+            relevant_results = [
+                max(
+                    candidates,
+                    key=lambda item: item[0],
+                )[1]
+            ]
 
         citations: list[Citation] = []
 
         for index, result in enumerate(
-            list(retrieved_results)[:max_citations], start=1
+            relevant_results[:max_citations],
+            start=1,
         ):
-            if not isinstance(result, dict):
-                continue
-
             metadata = result.get("metadata") or {}
+
             source = (
                 metadata.get("source")
                 or metadata.get("filename")
@@ -52,7 +128,11 @@ class CitationManager:
                 Citation(
                     citation_id=f"S{index}",
                     source=str(source),
-                    chunk_id=str(chunk_id) if chunk_id is not None else None,
+                    chunk_id=(
+                        str(chunk_id)
+                        if chunk_id is not None
+                        else None
+                    ),
                     score=score,
                     excerpt=self._excerpt(text),
                 )
@@ -65,13 +145,6 @@ class CitationManager:
         answer: str,
         citations: Iterable[Citation],
     ) -> str:
-        """
-        Append a compact source list.
-
-        The answer itself is not modified with unsupported inline claims.
-        This keeps source attribution deterministic and lets the frontend
-        render richer source cards separately.
-        """
         answer = answer.strip()
         citations = list(citations)
 
@@ -82,22 +155,85 @@ class CitationManager:
             return answer
 
         lines = ["", "Sources:"]
+
         for citation in citations:
-            lines.append(f"[{citation.citation_id}] {citation.source}")
+            lines.append(
+                f"[{citation.citation_id}] {citation.source}"
+            )
 
         return answer + "\n".join(lines)
 
     @staticmethod
-    def _score(result: dict[str, Any]) -> float | None:
-        for key in ("reranker_score", "rrf_score", "score", "semantic_score"):
+    def _score(
+        result: dict[str, Any],
+    ) -> float | None:
+        for key in (
+            "reranker_score",
+            "rrf_score",
+            "score",
+            "semantic_score",
+        ):
             value = result.get(key)
+
             if isinstance(value, (int, float)):
                 return float(value)
+
         return None
 
+    @classmethod
+    def _content_tokens(
+        cls,
+        text: str,
+    ) -> set[str]:
+        tokens = set(
+            re.findall(
+                r"[A-Za-z0-9][A-Za-z0-9_-]*",
+                text.lower(),
+            )
+        )
+
+        return tokens - cls.STOPWORDS
+
     @staticmethod
-    def _excerpt(text: str, limit: int = 240) -> str:
-        text = re.sub(r"\s+", " ", text).strip()
+    def _excerpt(
+        text: str,
+        limit: int = 240,
+    ) -> str:
+        text = re.sub(
+            r"\s+",
+            " ",
+            text,
+        ).strip()
+
         if len(text) <= limit:
             return text
+
         return text[: limit - 1].rstrip() + "…"
+
+    @classmethod
+    def _sentence_support(
+        cls,
+        sentence: str,
+        evidence_tokens: set[str],
+    ) -> float:
+        sentence_tokens = cls._content_tokens(sentence)
+
+        if not sentence_tokens:
+            return 0.0
+
+        return (
+            len(sentence_tokens & evidence_tokens)
+            / len(sentence_tokens)
+        )
+
+
+    @staticmethod
+    def _sentences(text: str) -> list[str]:
+        return [
+            part.strip()
+            for part in re.split(
+                r"(?<=[.!?])\s+",
+                text,
+            )
+            if part.strip()
+        ]
