@@ -85,8 +85,7 @@ class VectorStore:
         )
 
         self.connection = sqlite3.connect(
-            str(self.database_path),
-            check_same_thread=False,
+            str(self.database_path)
         )
 
         self.connection.row_factory = (

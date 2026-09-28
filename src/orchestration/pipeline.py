@@ -1,5 +1,6 @@
+
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from src.intelligence.intent_detector import (
     IntentDetector,
@@ -50,8 +51,8 @@ class StreamingRAGPipeline:
     """
     Orchestrates the streaming, intelligence, and optional retrieval stages.
 
-    Retrieval is injected through MultiQueryRetriever so this pipeline
-    remains independent of the underlying retrieval implementation.
+    Retrieval is initialized lazily only when the stream controller
+    decides that retrieval is required.
     """
 
     def __init__(
@@ -62,6 +63,7 @@ class StreamingRAGPipeline:
         query_decomposer: QueryDecomposer | None = None,
         query_refiner: QueryRefiner | None = None,
         multi_query_retriever: MultiQueryRetriever | None = None,
+        retriever_factory: Callable[[], MultiQueryRetriever] | None = None,
     ) -> None:
         self.session_manager = (
             session_manager or SessionManager()
@@ -79,6 +81,7 @@ class StreamingRAGPipeline:
             query_refiner or QueryRefiner()
         )
         self.multi_query_retriever = multi_query_retriever
+        self.retriever_factory = retriever_factory
 
         self._chunk_handlers: dict[str, ChunkHandler] = {}
 
@@ -122,6 +125,12 @@ class StreamingRAGPipeline:
                 session=session,
             )
 
+        if self.multi_query_retriever is None:
+            if self.retriever_factory is None:
+                raise RuntimeError("Retriever is not configured")
+
+            self.multi_query_retriever = self.retriever_factory()
+
         query = retrieval_decision.query
 
         if query is None:
@@ -157,29 +166,28 @@ class StreamingRAGPipeline:
 
         retrieved_results: tuple[dict[str, Any], ...] = ()
 
-        if self.multi_query_retriever is not None:
-            results = self.multi_query_retriever.retrieve(
-                [
-                    refined_query.refined_query
-                    for refined_query in refined_queries
-                ]
-            )
-
-            retrieved_results = tuple(results)
-
-            context_parts = [
-                result["text"]
-                for result in results
-                if isinstance(result.get("text"), str)
-                and result["text"].strip()
+        results = self.multi_query_retriever.retrieve(
+            [
+                refined_query.refined_query
+                for refined_query in refined_queries
             ]
+        )
 
-            if context_parts:
-                self.session_manager.add_retrieved_context(
-                    session_id=chunk.session_id,
-                    context="\n\n".join(context_parts),
-                    timestamp=chunk.timestamp,
-                )
+        retrieved_results = tuple(results)
+
+        context_parts = [
+            result["text"]
+            for result in results
+            if isinstance(result.get("text"), str)
+            and result["text"].strip()
+        ]
+
+        if context_parts:
+            self.session_manager.add_retrieved_context(
+                session_id=chunk.session_id,
+                context="\n\n".join(context_parts),
+                timestamp=chunk.timestamp,
+            )
 
         return PipelineResult(
             session_id=chunk.session_id,

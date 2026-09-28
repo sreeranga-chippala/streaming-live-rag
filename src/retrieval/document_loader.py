@@ -306,7 +306,7 @@ class DocumentLoader:
         with open(
             file_path,
             "r",
-            encoding="utf-8",
+            encoding="utf-8-sig",
             errors="replace",
         ) as file:
 
