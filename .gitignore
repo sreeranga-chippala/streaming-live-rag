@@ -29,8 +29,7 @@ logs/
 
 # Generated / temporary data
 data/processed/*
-!data/processed/chunks/
-!data/processed/chunks/.gitkeep
+data/raw/documents/*
 
 # Generated indexes / model artifacts
 *.index
