@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import time
 from dataclasses import asdict, dataclass
@@ -24,13 +24,14 @@ class Evaluator:
     """
     Evaluation and telemetry layer for the Theme 4 demo.
 
-    Supports:
+    Current metrics:
       - retrieval recall when gold chunk IDs are supplied
       - groundedness
       - citation coverage/count
-      - TTFT
-      - total latency
-      - aggregate summaries
+      - total request latency
+
+    Token-level TTFT is intentionally unavailable until the API exposes
+    real token streaming. It must not be inferred from request timestamps.
     """
 
     def __init__(self, grounding_checker: GroundingChecker | None = None):
@@ -54,13 +55,13 @@ class Evaluator:
         citation_list = list(citations or [])
 
         grounding = self.grounding_checker.check(answer, retrieved)
-
         recall = self._retrieval_recall(retrieved, gold_chunk_ids)
 
+        # Real token-level TTFT is not available while /chat returns
+        # one complete JSON response. Do not report a synthetic TTFT.
         ttft = None
+
         total = None
-        if started_at is not None and first_token_at is not None:
-            ttft = max(0.0, (first_token_at - started_at) * 1000.0)
         if started_at is not None and completed_at is not None:
             total = max(0.0, (completed_at - started_at) * 1000.0)
 
