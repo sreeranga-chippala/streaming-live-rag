@@ -30,6 +30,9 @@ logs/
 # Generated / temporary data
 data/processed/*
 data/raw/documents/*
+!data/raw/documents/*.pdf
+!data/raw/documents/*
+!data/raw/documents/*.pdf.pdf
 
 # Generated indexes / model artifacts
 *.index
