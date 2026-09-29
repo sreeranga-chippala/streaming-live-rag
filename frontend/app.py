@@ -14,6 +14,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+
+
 CSS = """
 <style>
 :root {
@@ -54,7 +56,7 @@ CSS = """
 .source { padding: 12px 14px; border-left: 3px solid var(--accent2);
           background: rgba(138,180,255,.06); border-radius: 10px; margin: 8px 0; }
 .stage { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.035); margin: 7px 0; }
-.small { color: var(--muted); font-size: .85rem; }
+
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
